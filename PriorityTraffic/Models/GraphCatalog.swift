@@ -120,7 +120,7 @@ final class GraphStore: ObservableObject {
             bbox: [52.0, -0.05, 52.35, 0.55],
             sizeBytes: size,
             url: URL(string: "https://raw.githubusercontent.com/Andris73/traffic-app/master/graphs/cambridge.json")!,
-            bundled: true,
+            bundled: true
         )]
     }
 
