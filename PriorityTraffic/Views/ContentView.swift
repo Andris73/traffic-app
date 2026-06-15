@@ -179,8 +179,10 @@ struct ContentView: View {
     @MainActor
     private func computeRoute(to dest: CLLocationCoordinate2D) async {
         guard let start = location.lastLocation?.coordinate else { return }
-        let result = await engine.route(from: start, to: dest)
-            ?? (try? await fallback.route(from: start, to: dest))
+        var result = await engine.route(from: start, to: dest)
+        if result == nil {
+            result = try? await fallback.route(from: start, to: dest)
+        }
         guard let result else { return }
         route = result
         withAnimation {
