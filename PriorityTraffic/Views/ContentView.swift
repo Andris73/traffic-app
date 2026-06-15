@@ -4,6 +4,7 @@ import MapKit
 struct ContentView: View {
     @StateObject private var location = LocationManager()
     @StateObject private var search = PlaceSearch()
+    @StateObject private var engine = RouteEngine()
 
     @State private var camera: MapCameraPosition = .userLocation(fallback: .automatic)
     @State private var destination: CLLocationCoordinate2D?
@@ -11,7 +12,7 @@ struct ContentView: View {
     @State private var route: Route?
     @FocusState private var searchFocused: Bool
 
-    private let router: Router = StraightLineRouter()
+    private let fallback = StraightLineRouter()
 
     var body: some View {
         GeometryReader { proxy in
@@ -29,7 +30,7 @@ struct ContentView: View {
                 recenterButton
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                     .padding(.trailing, 16)
-                    .padding(.bottom, insets.bottom + 96)
+                    .padding(.bottom, insets.bottom + (route == nil ? 84 : 150))
 
                 searchPanel
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
@@ -37,7 +38,10 @@ struct ContentView: View {
                     .padding(.bottom, insets.bottom + 10)
             }
         }
-        .onAppear { location.requestPermission() }
+        .onAppear {
+            location.requestPermission()
+            engine.loadIfNeeded()
+        }
     }
 
     private var map: some View {
@@ -175,7 +179,9 @@ struct ContentView: View {
     @MainActor
     private func computeRoute(to dest: CLLocationCoordinate2D) async {
         guard let start = location.lastLocation?.coordinate else { return }
-        guard let result = try? await router.route(from: start, to: dest) else { return }
+        let result = await engine.route(from: start, to: dest)
+            ?? (try? await fallback.route(from: start, to: dest))
+        guard let result else { return }
         route = result
         withAnimation {
             camera = .region(regionFitting(start, dest))
