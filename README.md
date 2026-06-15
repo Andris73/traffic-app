@@ -17,11 +17,19 @@ before any routing logic lands.
 
 Roadmap:
 
-1. **Phase 0** — pipeline + skeleton app *(here)*
-2. **Phase 1** — self-hosted Valhalla routing backend (UK extract)
-3. **Phase 2** — give-way costing (explicit OSM tags + road-class inference)
-4. **Phase 3** — navigation client (MapLibre route line, voice/banner guidance)
-5. **Phase 4** — on-device offline routing (Valhalla `xcframework` + UK tiles)
+1. **Done** — distribution pipeline + map + place search
+2. **Done** — on-device A* routing over a bundled OSM graph (Cambridge area)
+3. **Done** — downloadable area graphs (settings) + navigation follow + 5-minute reroute
+4. **Next** — give-way cost model (penalise entering higher-class roads, roundabout
+   entries, signal/give-way/stop nodes, right-turn-across-oncoming) with a
+   tunable aversion slider
+5. **Soon** — **user-defined areas built on-device.** Pick a bounding box (e.g.
+   Cambridgeshire + Suffolk + Essex) and the app fetches and contracts the OSM
+   graph itself, so we don't have to ship every region. Removes the
+   committed-graphs stopgap entirely.
+6. **Later** — historical time-of-day traffic profiles seeded from UK
+   National Highways WebTRIS (free, OGL), then an optional opt-in live overlay
+   via TomTom or HERE free tier (per the traffic research)
 
 ## Build
 

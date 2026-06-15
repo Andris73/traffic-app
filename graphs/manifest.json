@@ -1,0 +1,43 @@
+{
+  "areas": [
+    {
+      "id": "cambridge-city",
+      "name": "Cambridge (city)",
+      "bbox": [
+        52.16,
+        0.06,
+        52.25,
+        0.2
+      ],
+      "sizeBytes": 877292,
+      "url": "https://raw.githubusercontent.com/Andris73/traffic-app/master/graphs/cambridge-city.json",
+      "bundled": false
+    },
+    {
+      "id": "cambridge",
+      "name": "Cambridge area",
+      "bbox": [
+        52.0,
+        -0.05,
+        52.35,
+        0.55
+      ],
+      "sizeBytes": 3862047,
+      "url": "https://raw.githubusercontent.com/Andris73/traffic-app/master/graphs/cambridge.json",
+      "bundled": true
+    },
+    {
+      "id": "oxford",
+      "name": "Oxford",
+      "bbox": [
+        51.68,
+        -1.34,
+        51.83,
+        -1.15
+      ],
+      "sizeBytes": 1276872,
+      "url": "https://raw.githubusercontent.com/Andris73/traffic-app/master/graphs/oxford.json",
+      "bundled": false
+    }
+  ]
+}

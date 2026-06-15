@@ -4,22 +4,25 @@ import MapKit
 struct ContentView: View {
     @StateObject private var location = LocationManager()
     @StateObject private var search = PlaceSearch()
+    @StateObject private var store = GraphStore()
     @StateObject private var engine = RouteEngine()
 
     @State private var camera: MapCameraPosition = .userLocation(fallback: .automatic)
     @State private var destination: CLLocationCoordinate2D?
     @State private var destinationName = ""
     @State private var route: Route?
+    @State private var navigating = false
+    @State private var showSettings = false
     @FocusState private var searchFocused: Bool
 
     private let fallback = StraightLineRouter()
+    private let rerouteTimer = Timer.publish(every: 300, on: .main, in: .common).autoconnect()
 
     var body: some View {
         GeometryReader { proxy in
             let insets = proxy.safeAreaInsets
             ZStack(alignment: .topLeading) {
-                map
-                    .ignoresSafeArea()
+                map.ignoresSafeArea()
 
                 if location.isDenied {
                     permissionBanner
@@ -27,10 +30,15 @@ struct ContentView: View {
                         .padding(.top, insets.top)
                 }
 
+                settingsButton
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .padding(.leading, 16)
+                    .padding(.top, insets.top + 8)
+
                 recenterButton
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                     .padding(.trailing, 16)
-                    .padding(.bottom, insets.bottom + (route == nil ? 84 : 150))
+                    .padding(.bottom, insets.bottom + (route == nil ? 84 : 160))
 
                 searchPanel
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
@@ -40,7 +48,28 @@ struct ContentView: View {
         }
         .onAppear {
             location.requestPermission()
-            engine.loadIfNeeded()
+            engine.load(url: store.activeURL(), id: store.activeID)
+        }
+        .onChange(of: store.activeID) { _, _ in
+            engine.load(url: store.activeURL(), id: store.activeID)
+        }
+        .onChange(of: navigating) { _, isNav in
+            withAnimation {
+                camera = isNav
+                    ? .userLocation(followsHeading: true, fallback: .automatic)
+                    : .userLocation(fallback: .automatic)
+            }
+            if isNav {
+                location.startNavigation()
+            } else {
+                location.stopNavigation()
+            }
+        }
+        .onReceive(rerouteTimer) { _ in
+            Task { await rerouteIfBetter() }
+        }
+        .sheet(isPresented: $showSettings) {
+            SettingsView(store: store, engine: engine)
         }
     }
 
@@ -120,18 +149,42 @@ struct ContentView: View {
     }
 
     private func routeSummary(_ route: Route) -> some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(distanceString(route.distanceMeters))
-                    .font(.headline)
-                Text(route.isPreview
-                     ? "Straight-line preview — on-device routing coming next"
-                     : "Give-way events: \(route.giveWayCount.map(String.init) ?? "—")")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(distanceString(route.distanceMeters))
+                        .font(.headline)
+                    Text(detailLine(for: route))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
             }
-            Spacer()
-            Button("Clear") { clear() }
+            HStack(spacing: 10) {
+                if navigating {
+                    Button(role: .destructive) {
+                        navigating = false
+                    } label: {
+                        Label("Stop", systemImage: "stop.circle.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.red)
+                } else {
+                    Button("Clear") { clear() }
+                        .buttonStyle(.bordered)
+                    if !route.isPreview {
+                        Button {
+                            navigating = true
+                        } label: {
+                            Label("Start", systemImage: "play.fill")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.blue)
+                    }
+                }
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
@@ -139,10 +192,34 @@ struct ContentView: View {
         .shadow(radius: 6, y: 2)
     }
 
+    private func detailLine(for route: Route) -> String {
+        if route.isPreview {
+            return "Straight-line preview — destination is outside the active map."
+        }
+        let count = route.giveWayCount ?? 0
+        return navigating
+            ? "Live — give-way events: \(count)"
+            : "Give-way events: \(count)"
+    }
+
+    private var settingsButton: some View {
+        Button { showSettings = true } label: {
+            Image(systemName: "gearshape.fill")
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(.primary)
+                .frame(width: 44, height: 44)
+                .background(.regularMaterial, in: Circle())
+                .shadow(radius: 4, y: 2)
+        }
+        .accessibilityLabel("Settings")
+    }
+
     private var recenterButton: some View {
         Button {
             withAnimation(.easeInOut(duration: 0.4)) {
-                camera = .userLocation(fallback: .automatic)
+                camera = navigating
+                    ? .userLocation(followsHeading: true, fallback: .automatic)
+                    : .userLocation(fallback: .automatic)
             }
         } label: {
             Image(systemName: "location.fill")
@@ -185,12 +262,34 @@ struct ContentView: View {
         }
         guard let result else { return }
         route = result
-        withAnimation {
-            camera = .region(regionFitting(start, dest))
+        if !navigating {
+            withAnimation {
+                camera = .region(regionFitting(start, dest))
+            }
+        }
+    }
+
+    @MainActor
+    private func rerouteIfBetter() async {
+        guard navigating,
+              let dest = destination,
+              let start = location.lastLocation?.coordinate,
+              let candidate = await engine.route(from: start, to: dest) else { return }
+        guard let current = route else {
+            route = candidate
+            return
+        }
+        let curCount = current.giveWayCount ?? .max
+        let newCount = candidate.giveWayCount ?? .max
+        let better = newCount < curCount
+            || (newCount == curCount && candidate.distanceMeters < current.distanceMeters * 0.97)
+        if better {
+            route = candidate
         }
     }
 
     private func clear() {
+        if navigating { navigating = false }
         destination = nil
         destinationName = ""
         route = nil

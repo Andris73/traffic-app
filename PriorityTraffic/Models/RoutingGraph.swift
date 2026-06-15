@@ -25,9 +25,8 @@ final class RoutingGraph: @unchecked Sendable {
         self.adjacency = adjacency
     }
 
-    static func loadBundled(name: String = "graph-cambridge") -> RoutingGraph? {
-        guard let url = Bundle.main.url(forResource: name, withExtension: "json"),
-              let data = try? Data(contentsOf: url),
+    static func load(from url: URL) -> RoutingGraph? {
+        guard let data = try? Data(contentsOf: url),
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let vertsRaw = obj["vertices"] as? [[Double]],
               let edgesRaw = obj["edges"] as? [[Any]] else {

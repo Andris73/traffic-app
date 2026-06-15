@@ -14,6 +14,8 @@
 		A100001701 /* Routing.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200001701 /* Routing.swift */; };
 		A100001801 /* RoutingGraph.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200001801 /* RoutingGraph.swift */; };
 		A100001901 /* RouteEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200001901 /* RouteEngine.swift */; };
+		A100001B01 /* GraphCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200001B01 /* GraphCatalog.swift */; };
+		A100001C01 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200001C01 /* SettingsView.swift */; };
 		A100001A01 /* graph-cambridge.json in Resources */ = {isa = PBXBuildFile; fileRef = A200001A01 /* graph-cambridge.json */; };
 		A100001401 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A200001401 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
@@ -26,6 +28,8 @@
 		A200001701 /* Routing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Routing.swift; sourceTree = "<group>"; };
 		A200001801 /* RoutingGraph.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutingGraph.swift; sourceTree = "<group>"; };
 		A200001901 /* RouteEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteEngine.swift; sourceTree = "<group>"; };
+		A200001B01 /* GraphCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphCatalog.swift; sourceTree = "<group>"; };
+		A200001C01 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		A200001A01 /* graph-cambridge.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "graph-cambridge.json"; sourceTree = "<group>"; };
 		A200001301 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A200001401 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -88,6 +92,7 @@
 				A200001701 /* Routing.swift */,
 				A200001801 /* RoutingGraph.swift */,
 				A200001901 /* RouteEngine.swift */,
+				A200001B01 /* GraphCatalog.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -96,6 +101,7 @@
 			isa = PBXGroup;
 			children = (
 				A200001101 /* ContentView.swift */,
+				A200001C01 /* SettingsView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -172,6 +178,8 @@
 				A100001701 /* Routing.swift in Sources */,
 				A100001801 /* RoutingGraph.swift in Sources */,
 				A100001901 /* RouteEngine.swift in Sources */,
+				A100001B01 /* GraphCatalog.swift in Sources */,
+				A100001C01 /* SettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

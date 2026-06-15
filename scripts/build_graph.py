@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Build a compact on-device routing graph from OSM (Overpass) for a bbox.
+"""Build compact on-device routing graphs from OSM (Overpass) for named areas.
 
-Fetches the drivable highway network, contracts shape points so vertices are
-only junctions/endpoints (keeping geometry as a polyline per edge), tags
-give-way relevant nodes, and writes a JSON graph the app bundles.
+For each area it fetches the drivable highway network, contracts shape points so
+vertices are only junctions/endpoints (keeping geometry as a polyline per edge),
+tags give-way relevant nodes, and writes graphs/<id>.json plus a manifest the app
+reads to offer downloads. The default area is also copied into the app bundle.
 
-Output schema (arrays, not objects, to keep it small):
+Graph schema (arrays, not objects, to keep it small):
   {
     "bbox": [s, w, n, e],
     "vertices": [[lat, lon, flags], ...],         # flags bitmask, see FLAG_*
@@ -20,8 +21,16 @@ import os
 import urllib.parse
 import urllib.request
 
-# Cambridge area: Cambridge / Newmarket / Haverhill / Saffron Walden
-BBOX = (52.00, -0.05, 52.35, 0.55)  # south, west, north, east
+RAW_BASE = "https://raw.githubusercontent.com/Andris73/traffic-app/master/graphs"
+
+# id: (display name, (south, west, north, east), bundled-as-default?)
+AREAS = {
+    "cambridge-city": ("Cambridge (city)", (52.16, 0.06, 52.25, 0.20), False),
+    "cambridge": ("Cambridge area", (52.00, -0.05, 52.35, 0.55), True),
+    "oxford": ("Oxford", (51.68, -1.34, 51.83, -1.15), False),
+}
+
+DEFAULT_AREA = "cambridge"
 
 OVERPASS_ENDPOINTS = [
     "https://overpass.kumi.systems/api/interpreter",
@@ -49,9 +58,13 @@ FLAG_STOP = 2
 FLAG_SIGNAL = 4
 FLAG_ROUNDABOUT = 8
 
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+GRAPHS_DIR = os.path.join(REPO_ROOT, "graphs")
+BUNDLE_PATH = os.path.join(REPO_ROOT, "PriorityTraffic", "Resources", "graph-cambridge.json")
 
-def overpass_query():
-    s, w, n, e = BBOX
+
+def overpass_query(bbox):
+    s, w, n, e = bbox
     return f"""
 [out:json][timeout:300];
 (
@@ -62,8 +75,8 @@ out body;
 """
 
 
-def fetch():
-    body = urllib.parse.urlencode({"data": overpass_query()}).encode()
+def fetch(query):
+    body = urllib.parse.urlencode({"data": query}).encode()
     last_error = None
     for endpoint in OVERPASS_ENDPOINTS:
         try:
@@ -76,11 +89,11 @@ def fetch():
                     "Accept": "application/json",
                 },
             )
-            print(f"querying {endpoint} ...")
+            print(f"  querying {endpoint} ...")
             data = urllib.request.urlopen(req, timeout=320).read()
             return json.loads(data)
         except Exception as exc:  # noqa: BLE001 - try the next mirror
-            print(f"  {endpoint} failed: {exc}")
+            print(f"    {endpoint} failed: {exc}")
             last_error = exc
     raise SystemExit(f"all Overpass endpoints failed: {last_error}")
 
@@ -94,8 +107,8 @@ def haversine(a, b):
     return 2 * r * math.asin(math.sqrt(h))
 
 
-def main():
-    raw = fetch()
+def build_area(area_id, bbox):
+    raw = fetch(overpass_query(bbox))
     elements = raw["elements"]
 
     nodes = {}
@@ -106,7 +119,6 @@ def main():
         elif el["type"] == "way" and el.get("nodes"):
             ways.append((el.get("tags", {}), el["nodes"]))
 
-    # Node flags + how many ways use each node (to find junctions).
     usage = {}
     for _, nds in ways:
         for nid in nds:
@@ -126,8 +138,6 @@ def main():
             f |= FLAG_ROUNDABOUT
         return f
 
-    # A node is a graph vertex if it joins >1 way, is a way endpoint, or carries
-    # a give-way relevant tag.
     is_vertex = {}
     for _, nds in ways:
         for i, nid in enumerate(nds):
@@ -141,15 +151,13 @@ def main():
     def vertex_id(nid):
         if nid not in vindex:
             lat, lon, _ = nodes[nid]
-            f = node_flags(nid)
             vindex[nid] = len(vertices)
-            vertices.append([round(lat, 6), round(lon, 6), f])
+            vertices.append([round(lat, 6), round(lon, 6), node_flags(nid)])
         return vindex[nid]
 
     edges = []
     for tags, nds in ways:
-        hw = tags.get("highway")
-        cls = CLASS_RANK.get(hw, 8)
+        cls = CLASS_RANK.get(tags.get("highway"), 8)
         roundabout = tags.get("junction") in ("roundabout", "circular")
         ow = tags.get("oneway", "")
         if roundabout or ow in ("yes", "true", "1"):
@@ -159,34 +167,56 @@ def main():
         else:
             oneway = 0
 
-        # Walk the way, cutting a new edge at each vertex node.
         seg_start = nds[0]
         coords = [(nodes[nds[0]][0], nodes[nds[0]][1])]
         length = 0.0
         for prev, cur in zip(nds, nds[1:]):
-            p = (nodes[prev][0], nodes[prev][1])
-            c = (nodes[cur][0], nodes[cur][1])
-            length += haversine(p, c)
-            coords.append(c)
+            length += haversine((nodes[prev][0], nodes[prev][1]), (nodes[cur][0], nodes[cur][1]))
+            coords.append((nodes[cur][0], nodes[cur][1]))
             if is_vertex.get(cur):
                 if cur != seg_start and length > 0:
-                    u, v = vertex_id(seg_start), vertex_id(cur)
                     flat = [round(x, 6) for pt in coords for x in pt]
-                    edges.append([u, v, round(length, 1), cls, oneway, flat])
+                    edges.append([vertex_id(seg_start), vertex_id(cur), round(length, 1), cls, oneway, flat])
                 seg_start = cur
-                coords = [c]
+                coords = [(nodes[cur][0], nodes[cur][1])]
                 length = 0.0
 
-    out = {"bbox": list(BBOX), "vertices": vertices, "edges": edges}
-    dest = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                        "PriorityTraffic", "Resources", "graph-cambridge.json")
-    os.makedirs(os.path.dirname(dest), exist_ok=True)
-    with open(dest, "w") as f:
+    out = {"bbox": list(bbox), "vertices": vertices, "edges": edges}
+    os.makedirs(GRAPHS_DIR, exist_ok=True)
+    path = os.path.join(GRAPHS_DIR, f"{area_id}.json")
+    with open(path, "w") as f:
         json.dump(out, f, separators=(",", ":"))
-    size = os.path.getsize(dest)
-    flagged = sum(1 for v in vertices if v[2])
-    print(f"vertices={len(vertices)} edges={len(edges)} flagged_nodes={flagged} "
-          f"size={size/1e6:.2f}MB -> {dest}")
+    return path, len(vertices), len(edges), os.path.getsize(path)
+
+
+def main():
+    manifest = {"areas": []}
+    for area_id, (name, bbox, _bundled) in AREAS.items():
+        print(f"{area_id}: {name}")
+        path = os.path.join(GRAPHS_DIR, f"{area_id}.json")
+        if os.path.exists(path):
+            size = os.path.getsize(path)
+            print(f"  exists, skipping fetch (size={size/1e6:.2f}MB)")
+        else:
+            path, nv, ne, size = build_area(area_id, bbox)
+            print(f"  vertices={nv} edges={ne} size={size/1e6:.2f}MB")
+        manifest["areas"].append({
+            "id": area_id,
+            "name": name,
+            "bbox": list(bbox),
+            "sizeBytes": size,
+            "url": f"{RAW_BASE}/{area_id}.json",
+            "bundled": area_id == DEFAULT_AREA,
+        })
+
+    with open(os.path.join(GRAPHS_DIR, "manifest.json"), "w") as f:
+        json.dump(manifest, f, indent=2)
+
+    default_src = os.path.join(GRAPHS_DIR, f"{DEFAULT_AREA}.json")
+    os.makedirs(os.path.dirname(BUNDLE_PATH), exist_ok=True)
+    with open(default_src, "rb") as s, open(BUNDLE_PATH, "wb") as d:
+        d.write(s.read())
+    print(f"manifest: {len(manifest['areas'])} areas; bundled default '{DEFAULT_AREA}'")
 
 
 if __name__ == "__main__":
