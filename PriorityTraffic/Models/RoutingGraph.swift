@@ -5,10 +5,12 @@ struct GraphEdge {
     let to: Int
     let length: Double
     let roadClass: Int
+    let bearingIn: Double      // heading at start (leaving source vertex)
+    let bearingOut: Double     // heading at end (arriving at destination vertex)
     let geometry: [CLLocationCoordinate2D]
 }
 
-/// A contracted OSM routing graph loaded from the bundled JSON. Vertices are
+/// A contracted OSM routing graph loaded from a JSON file. Vertices are
 /// junctions/endpoints; each edge keeps its full polyline for drawing.
 final class RoutingGraph: @unchecked Sendable {
     let coords: [CLLocationCoordinate2D]
@@ -18,6 +20,21 @@ final class RoutingGraph: @unchecked Sendable {
     // Free-flow speeds (m/s) by road class 0..8, lower class = faster road.
     private static let speed: [Double] = [31, 27, 22, 18, 13, 11, 8, 4, 4]
     private static let maxSpeed = 31.0
+
+    // Node-flag bits (must match build_graph.py).
+    private static let flagGiveWay: UInt8 = 1
+    private static let flagStop: UInt8 = 2
+    private static let flagSignal: UInt8 = 4
+    private static let flagMiniRoundabout: UInt8 = 8
+
+    // Transition-cost components (seconds). Multiplied by the user's aversion
+    // factor at query time.
+    private static let nodeGiveWay = 15.0
+    private static let nodeStop = 25.0
+    private static let nodeSignal = 20.0
+    private static let nodeMiniRoundabout = 10.0
+    private static let classStepPenalty = 12.0     // per class jumped (smaller -> bigger)
+    private static let rightTurnPenalty = 8.0      // right turn crossing oncoming traffic
 
     init(coords: [CLLocationCoordinate2D], flags: [UInt8], adjacency: [[GraphEdge]]) {
         self.coords = coords
@@ -57,17 +74,33 @@ final class RoutingGraph: @unchecked Sendable {
                 geo.append(CLLocationCoordinate2D(latitude: flat[i], longitude: flat[i + 1]))
                 i += 2
             }
+            guard geo.count >= 2 else { continue }
             if oneway != -1 {
-                adjacency[u].append(GraphEdge(to: v, length: len, roadClass: cls, geometry: geo))
+                let bIn = bearing(geo[0], geo[1])
+                let bOut = bearing(geo[geo.count - 2], geo[geo.count - 1])
+                adjacency[u].append(GraphEdge(
+                    to: v, length: len, roadClass: cls,
+                    bearingIn: bIn, bearingOut: bOut, geometry: geo
+                ))
             }
             if oneway != 1 {
-                adjacency[v].append(GraphEdge(to: u, length: len, roadClass: cls, geometry: Array(geo.reversed())))
+                let rev = Array(geo.reversed())
+                let bIn = bearing(rev[0], rev[1])
+                let bOut = bearing(rev[rev.count - 2], rev[rev.count - 1])
+                adjacency[v].append(GraphEdge(
+                    to: u, length: len, roadClass: cls,
+                    bearingIn: bIn, bearingOut: bOut, geometry: rev
+                ))
             }
         }
         return RoutingGraph(coords: coords, flags: flags, adjacency: adjacency)
     }
 
-    func route(from: CLLocationCoordinate2D, to: CLLocationCoordinate2D) -> Route? {
+    func route(
+        from: CLLocationCoordinate2D,
+        to: CLLocationCoordinate2D,
+        multiplier: Double = 1.0
+    ) -> Route? {
         guard let start = nearestVertex(to: from), let goal = nearestVertex(to: to) else { return nil }
         let n = coords.count
         var gScore = [Double](repeating: .greatestFiniteMagnitude, count: n)
@@ -83,8 +116,19 @@ final class RoutingGraph: @unchecked Sendable {
             if current == goal { break }
             if closed[current] { continue }
             closed[current] = true
+
+            let prevEdge: GraphEdge? = {
+                guard cameFrom[current] >= 0, cameEdge[current] >= 0 else { return nil }
+                return adjacency[cameFrom[current]][cameEdge[current]]
+            }()
+
             for (idx, edge) in adjacency[current].enumerated() {
-                let tentative = gScore[current] + edge.length / Self.speed[edge.roadClass]
+                let edgeTime = edge.length / Self.speed[edge.roadClass]
+                var transition = 0.0
+                if let prev = prevEdge, multiplier > 0 {
+                    transition = transitionCost(from: prev, at: current, to: edge) * multiplier
+                }
+                let tentative = gScore[current] + edgeTime + transition
                 if tentative < gScore[edge.to] {
                     gScore[edge.to] = tentative
                     cameFrom[edge.to] = current
@@ -116,7 +160,18 @@ final class RoutingGraph: @unchecked Sendable {
             distance += edge.length
         }
 
-        let giveWay = path.reduce(into: 0) { $0 += flags[$1] != 0 ? 1 : 0 }
+        // Give-way count = interior vertices whose transition cost was non-zero.
+        var giveWay = 0
+        if path.count >= 3 {
+            for i in 1..<(path.count - 1) {
+                let arrive = adjacency[path[i - 1]][cameEdge[path[i]]]
+                let leave = adjacency[path[i]][cameEdge[path[i + 1]]]
+                if transitionCost(from: arrive, at: path[i], to: leave) > 0 {
+                    giveWay += 1
+                }
+            }
+        }
+
         return Route(coordinates: geometry, distanceMeters: distance, giveWayCount: giveWay, isPreview: false)
     }
 
@@ -139,6 +194,36 @@ final class RoutingGraph: @unchecked Sendable {
     private func heuristic(_ a: Int, _ goal: Int) -> Double {
         haversine(coords[a], coords[goal]) / Self.maxSpeed
     }
+
+    /// Cost added at `vertex` for the manoeuvre `prev` -> `vertex` -> `next`.
+    private func transitionCost(from prev: GraphEdge, at vertex: Int, to next: GraphEdge) -> Double {
+        var cost = 0.0
+        let f = flags[vertex]
+        if f & Self.flagGiveWay != 0 { cost += Self.nodeGiveWay }
+        if f & Self.flagStop != 0 { cost += Self.nodeStop }
+        if f & Self.flagSignal != 0 { cost += Self.nodeSignal }
+        if f & Self.flagMiniRoundabout != 0 { cost += Self.nodeMiniRoundabout }
+
+        // Joining a higher-class road from a lower-class one: typically yield.
+        if next.roadClass < prev.roadClass {
+            cost += Double(prev.roadClass - next.roadClass) * Self.classStepPenalty
+        }
+
+        // UK drives on the left, so a right turn crosses oncoming traffic.
+        let turn = normalisedTurn(prev.bearingOut, next.bearingIn)
+        if turn > 30, turn < 150 {
+            cost += Self.rightTurnPenalty
+        }
+
+        return cost
+    }
+
+    private func normalisedTurn(_ b1: Double, _ b2: Double) -> Double {
+        var d = b2 - b1
+        while d > 180 { d -= 360 }
+        while d < -180 { d += 360 }
+        return d
+    }
 }
 
 func haversine(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D) -> Double {
@@ -149,6 +234,15 @@ func haversine(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D) -> Doub
     let dLon = (b.longitude - a.longitude) * .pi / 180
     let h = sin(dLat / 2) * sin(dLat / 2) + cos(lat1) * cos(lat2) * sin(dLon / 2) * sin(dLon / 2)
     return 2 * r * asin(min(1, sqrt(h)))
+}
+
+private func bearing(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D) -> Double {
+    let lat1 = a.latitude * .pi / 180
+    let lat2 = b.latitude * .pi / 180
+    let dLon = (b.longitude - a.longitude) * .pi / 180
+    let y = sin(dLon) * cos(lat2)
+    let x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dLon)
+    return atan2(y, x) * 180 / .pi
 }
 
 private struct MinHeap {

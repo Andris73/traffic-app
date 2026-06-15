@@ -20,10 +20,11 @@ Roadmap:
 1. **Done** — distribution pipeline + map + place search
 2. **Done** — on-device A* routing over a bundled OSM graph (Cambridge area)
 3. **Done** — downloadable area graphs (settings) + navigation follow + 5-minute reroute
-4. **Next** — give-way cost model (penalise entering higher-class roads, roundabout
-   entries, signal/give-way/stop nodes, right-turn-across-oncoming) with a
-   tunable aversion slider
-5. **Soon** — **user-defined areas built on-device.** Pick a bounding box (e.g.
+4. **Done** — give-way cost model: explicit OSM node flags
+   (give_way / stop / signals / mini-roundabout), road-class step-up at
+   junctions, right-turn-across-oncoming (UK left-side), with a tunable
+   aversion slider (0–3×, persisted) in Settings
+5. **Next** — **user-defined areas built on-device.** Pick a bounding box (e.g.
    Cambridgeshire + Suffolk + Essex) and the app fetches and contracts the OSM
    graph itself, so we don't have to ship every region. Removes the
    committed-graphs stopgap entirely.

@@ -18,9 +18,16 @@ struct SettingsView: View {
                     Text("Downloaded maps are stored on your device and used for offline routing inside their bounding box.")
                 }
 
+                Section {
+                    AversionSlider(engine: engine)
+                } header: {
+                    Text("Give-way aversion")
+                } footer: {
+                    Text("Higher values pick routes that yield less often — at the cost of distance or time.")
+                }
+
                 Section("Coming soon") {
                     bullet("Pick your own area (counties, regions) and build the graph on-device — no need to ship every region in the app.")
-                    bullet("Give-way aversion slider — trade a longer route for fewer give-way events.")
                     bullet("Time-of-day historical traffic profile (UK National Highways).")
                 }
 
@@ -109,6 +116,41 @@ private struct AreaRow: View {
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
+        }
+    }
+}
+
+private struct AversionSlider: View {
+    @ObservedObject var engine: RouteEngine
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(label)
+                    .font(.body)
+                Spacer()
+                Text(String(format: "%.2f×", engine.aversion))
+                    .font(.body.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+            Slider(value: $engine.aversion, in: 0...3, step: 0.25) {
+                Text("Aversion")
+            } minimumValueLabel: {
+                Text("Fastest").font(.caption2).foregroundStyle(.secondary)
+            } maximumValueLabel: {
+                Text("Aversive").font(.caption2).foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private var label: String {
+        switch engine.aversion {
+        case 0: return "Fastest"
+        case 0.01..<0.75: return "Mild"
+        case 0.75...1.25: return "Default"
+        case 1.25..<2.25: return "Strong"
+        default: return "Aversive"
         }
     }
 }

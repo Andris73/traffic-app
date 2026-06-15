@@ -68,6 +68,12 @@ struct ContentView: View {
         .onReceive(rerouteTimer) { _ in
             Task { await rerouteIfBetter() }
         }
+        .task(id: engine.aversion) {
+            guard let dest = destination, route != nil else { return }
+            try? await Task.sleep(for: .milliseconds(350))
+            if Task.isCancelled { return }
+            await computeRoute(to: dest)
+        }
         .sheet(isPresented: $showSettings) {
             SettingsView(store: store, engine: engine)
         }
@@ -197,9 +203,9 @@ struct ContentView: View {
             return "Straight-line preview — destination is outside the active map."
         }
         let count = route.giveWayCount ?? 0
-        return navigating
-            ? "Live — give-way events: \(count)"
-            : "Give-way events: \(count)"
+        let aversion = String(format: "%.2f×", engine.aversion)
+        let prefix = navigating ? "Live" : "Give-way"
+        return "\(prefix): \(count) events  ·  aversion \(aversion)"
     }
 
     private var settingsButton: some View {

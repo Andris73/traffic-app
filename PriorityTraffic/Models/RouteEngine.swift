@@ -7,8 +7,22 @@ final class RouteEngine: ObservableObject {
 
     @Published var status: Status = .idle
     @Published private(set) var loadedID: String?
+    @Published var aversion: Double {
+        didSet { UserDefaults.standard.set(aversion, forKey: Self.aversionKey) }
+    }
+
+    private static let aversionKey = "giveWayAversion"
+    static let defaultAversion = 1.0
 
     private var graph: RoutingGraph?
+
+    init() {
+        if let stored = UserDefaults.standard.object(forKey: Self.aversionKey) as? Double {
+            self.aversion = stored
+        } else {
+            self.aversion = Self.defaultAversion
+        }
+    }
 
     func load(url: URL?, id: String) {
         guard let url else {
@@ -31,8 +45,9 @@ final class RouteEngine: ObservableObject {
 
     func route(from: CLLocationCoordinate2D, to: CLLocationCoordinate2D) async -> Route? {
         guard let graph else { return nil }
+        let multiplier = aversion
         return await Task.detached(priority: .userInitiated) {
-            graph.route(from: from, to: to)
+            graph.route(from: from, to: to, multiplier: multiplier)
         }.value
     }
 }
