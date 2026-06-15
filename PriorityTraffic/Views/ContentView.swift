@@ -6,41 +6,64 @@ struct ContentView: View {
     @State private var camera: MapCameraPosition = .userLocation(fallback: .automatic)
 
     var body: some View {
-        ZStack(alignment: .top) {
-            Map(position: $camera) {
-                UserAnnotation()
-            }
-            .mapControls {
-                MapUserLocationButton()
-                MapCompass()
-            }
-            .ignoresSafeArea()
+        GeometryReader { proxy in
+            let insets = proxy.safeAreaInsets
+            ZStack(alignment: .topLeading) {
+                Map(position: $camera) {
+                    UserAnnotation()
+                }
+                .ignoresSafeArea()
 
-            header
+                title
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.top, insets.top + 6)
+
+                recenterButton
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                    .padding(.trailing, 16)
+                    .padding(.bottom, insets.bottom + 24)
+
+                if location.isDenied {
+                    permissionBanner
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                }
+            }
         }
         .onAppear { location.requestPermission() }
-        .overlay(alignment: .bottom) { permissionBanner }
     }
 
-    private var header: some View {
+    private var title: some View {
         Text("Priority Traffic")
             .font(.headline)
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
             .background(.ultraThinMaterial, in: Capsule())
-            .padding(.top, 8)
+            .shadow(radius: 4, y: 1)
     }
 
-    @ViewBuilder
-    private var permissionBanner: some View {
-        if location.authorization == .denied || location.authorization == .restricted {
-            Text("Location access denied — enable it in Settings to route from your position.")
-                .font(.footnote)
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.white)
-                .padding()
-                .frame(maxWidth: .infinity)
-                .background(.red.opacity(0.85))
+    private var recenterButton: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.4)) {
+                camera = .userLocation(fallback: .automatic)
+            }
+        } label: {
+            Image(systemName: "location.fill")
+                .font(.system(size: 20, weight: .medium))
+                .foregroundStyle(.tint)
+                .frame(width: 50, height: 50)
+                .background(.regularMaterial, in: Circle())
+                .shadow(radius: 4, y: 2)
         }
+        .accessibilityLabel("Centre on my location")
+    }
+
+    private var permissionBanner: some View {
+        Text("Location access denied — enable it in Settings to route from your position.")
+            .font(.footnote)
+            .multilineTextAlignment(.center)
+            .foregroundStyle(.white)
+            .padding()
+            .frame(maxWidth: .infinity)
+            .background(.red.opacity(0.85))
     }
 }

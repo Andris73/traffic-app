@@ -8,6 +8,10 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
 
     private let manager = CLLocationManager()
 
+    var isDenied: Bool {
+        authorization == .denied || authorization == .restricted
+    }
+
     override init() {
         authorization = manager.authorizationStatus
         super.init()
