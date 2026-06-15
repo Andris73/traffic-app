@@ -1,0 +1,83 @@
+name: Build and publish
+
+on: [push, workflow_dispatch]
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "16.2"
+      - name: Install Xcode platforms
+        run: |
+          xcrun simctl list > /dev/null
+          xcodebuild -downloadPlatform iOS
+      - name: Get info
+        id: info
+        run: |
+          echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+          echo "build=$(git rev-list --count HEAD)" >> $GITHUB_OUTPUT
+      - name: Build
+        run: |
+          xcodebuild -scheme "PriorityTraffic" -configuration Release archive \
+            -archivePath build/PriorityTraffic.xcarchive -skipPackagePluginValidation \
+            CODE_SIGN_IDENTITY= CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
+            CURRENT_PROJECT_VERSION=${{ steps.info.outputs.build }}
+      - name: Package ipa
+        id: package
+        run: |
+          mkdir -p Payload
+          cp -r build/PriorityTraffic.xcarchive/Products/Applications/PriorityTraffic.app Payload/
+          zip -r PriorityTraffic.ipa Payload
+          cp PriorityTraffic.ipa /tmp/PriorityTraffic.ipa
+          APP="build/PriorityTraffic.xcarchive/Products/Applications/PriorityTraffic.app/Info.plist"
+          echo "version=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP")" >> $GITHUB_OUTPUT
+          echo "build=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP")" >> $GITHUB_OUTPUT
+          echo "size=$(stat -f%z PriorityTraffic.ipa)" >> $GITHUB_OUTPUT
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PriorityTraffic-${{ steps.package.outputs.version }}.ipa
+          path: /tmp/PriorityTraffic.ipa
+          if-no-files-found: error
+      - name: Publish to combined AltStore source
+        if: github.ref_name == 'master' || github.ref_name == 'main'
+        env:
+          APP_ID: prioritytraffic
+          VERSION: "${{ steps.package.outputs.version }}"
+          BUILD: "${{ steps.package.outputs.build }}"
+          SIZE: "${{ steps.package.outputs.size }}"
+          SHA_SHORT: "${{ steps.info.outputs.sha_short }}"
+          DATE: "${{ steps.info.outputs.date }}"
+          ALTSTORE_TOKEN: "${{ secrets.ALTSTORE_TOKEN }}"
+        run: |
+          if [ -z "$ALTSTORE_TOKEN" ]; then
+            echo "ALTSTORE_TOKEN not set — skipping publish. IPA is available as a build artifact."
+            exit 0
+          fi
+          for attempt in 1 2 3; do
+            rm -rf /tmp/altstore
+            git clone --depth 1 "https://x-access-token:${ALTSTORE_TOKEN}@github.com/Andris73/altstore.git" /tmp/altstore
+            mkdir -p /tmp/altstore/ipas /tmp/altstore/icons /tmp/altstore/tools/apps
+            cp /tmp/PriorityTraffic.ipa /tmp/altstore/ipas/prioritytraffic.ipa
+            cp "$GITHUB_WORKSPACE/icon.png" /tmp/altstore/icons/prioritytraffic.png
+            cp "$GITHUB_WORKSPACE/altstore/prioritytraffic.json" /tmp/altstore/tools/apps/prioritytraffic.json
+            if ( cd /tmp/altstore \
+                 && python3 tools/update_app.py \
+                 && git config user.name "github-actions" \
+                 && git config user.email "github-actions@github.com" \
+                 && git add apps.json ipas/prioritytraffic.ipa icons/prioritytraffic.png tools/apps/prioritytraffic.json \
+                 && { git commit -m "Priority Traffic ${VERSION} (build ${BUILD})" || exit 0; } \
+                 && git push ); then
+              echo "Published Priority Traffic ${VERSION} (build ${BUILD})"
+              break
+            fi
+            echo "Publish attempt ${attempt} failed (possible push race); retrying…"
+            sleep $((RANDOM % 5 + 3))
+          done

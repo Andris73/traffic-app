@@ -1,0 +1,10 @@
+{
+  "name": "Priority Traffic",
+  "bundleIdentifier": "com.prioritytraffic.app",
+  "developerName": "Andris73",
+  "subtitle": "Navigation that avoids giving way",
+  "localizedDescription": "Priority Traffic routes you for right-of-way, picking roads where you keep priority and give way as little as possible for a smoother journey.",
+  "iconURL": "https://raw.githubusercontent.com/Andris73/altstore/master/icons/prioritytraffic.png",
+  "downloadURL": "https://github.com/Andris73/altstore/raw/master/ipas/prioritytraffic.ipa",
+  "minOSVersion": "18.0"
+}

@@ -1,0 +1,51 @@
+# Priority Traffic
+
+A turn-by-turn iOS navigation app that routes for **priority / right-of-way**.
+Where a normal app routes for shortest time, Priority Traffic prefers roads
+where you keep priority and have to *give way* as rarely as possible (UK
+"give way to the right"), trading a little distance for a smoother, less
+stop-start drive.
+
+Native SwiftUI, built unsigned on GitHub Actions and distributed by sideloading
+through the [Andris73 AltStore source](https://github.com/Andris73/altstore).
+
+## Status
+
+**Phase 0 — distribution pipeline.** Minimal app: a MapKit map centred on your
+location, proving the build → IPA → AltStore → on-device install loop works
+before any routing logic lands.
+
+Roadmap:
+
+1. **Phase 0** — pipeline + skeleton app *(here)*
+2. **Phase 1** — self-hosted Valhalla routing backend (UK extract)
+3. **Phase 2** — give-way costing (explicit OSM tags + road-class inference)
+4. **Phase 3** — navigation client (MapLibre route line, voice/banner guidance)
+5. **Phase 4** — on-device offline routing (Valhalla `xcframework` + UK tiles)
+
+## Build
+
+CI (`.github/workflows/build.yml`) runs on every push and is manually runnable
+(`workflow_dispatch`). It archives unsigned, zips a `Payload/` into
+`PriorityTraffic.ipa`, uploads it as a build artifact, and (on `main`/`master`)
+publishes to the AltStore source.
+
+## Distribution setup (one-time)
+
+The build publishes to the central `Andris73/altstore` repo. All it needs is a
+`ALTSTORE_TOKEN` secret on this repo — a PAT with write access to
+`Andris73/altstore`. CI then syncs the app metadata
+([`altstore/prioritytraffic.json`](altstore/prioritytraffic.json)) into the
+central repo's `tools/apps/`, commits the IPA and icon, and updates `apps.json`,
+so the first publish bootstraps everything with no manual central-repo edit.
+
+Until `ALTSTORE_TOKEN` is set the publish step skips cleanly and the IPA is still
+available as a build artifact, so the pipeline is testable immediately. App
+metadata (name, subtitle, description) is edited here in
+`altstore/prioritytraffic.json`.
+
+## Targets
+
+- Deployment target: **iOS 18.0** (runs on iOS 26 devices; bump the CI Xcode to
+  26 if iOS 26-only APIs are ever needed).
+- Bundle ID: `com.prioritytraffic.app`
