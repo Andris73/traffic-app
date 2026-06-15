@@ -4,6 +4,7 @@ struct SettingsView: View {
     @ObservedObject var store: GraphStore
     @ObservedObject var engine: RouteEngine
     @Environment(\.dismiss) private var dismiss
+    @State private var showCustomArea = false
 
     var body: some View {
         NavigationStack {
@@ -12,10 +13,23 @@ struct SettingsView: View {
                     ForEach(store.areas) { area in
                         AreaRow(area: area, store: store, engine: engine)
                     }
+                    Button {
+                        showCustomArea = true
+                    } label: {
+                        Label("Build custom area…", systemImage: "plus.square.dashed")
+                    }
                 } header: {
                     Text("Search area")
                 } footer: {
-                    Text("Downloaded maps are stored on your device and used for offline routing inside their bounding box.")
+                    Text("Downloaded maps are stored on your device and used for offline routing inside their bounding box. Custom areas are built on-device from OpenStreetMap.")
+                }
+
+                if !store.userAreas.isEmpty {
+                    Section("Your areas") {
+                        ForEach(store.userAreas) { area in
+                            AreaRow(area: area, store: store, engine: engine)
+                        }
+                    }
                 }
 
                 Section {
@@ -27,8 +41,8 @@ struct SettingsView: View {
                 }
 
                 Section("Coming soon") {
-                    bullet("Pick your own area (counties, regions) and build the graph on-device — no need to ship every region in the app.")
-                    bullet("Time-of-day historical traffic profile (UK National Highways).")
+                    bullet("Time-of-day historical traffic profile (UK National Highways WebTRIS).")
+                    bullet("Optional live traffic overlay (TomTom or HERE free tier).")
                 }
 
                 Section {
@@ -44,6 +58,9 @@ struct SettingsView: View {
                 }
             }
             .task { await store.refreshManifest() }
+            .sheet(isPresented: $showCustomArea) {
+                CustomAreaSheet(store: store, engine: engine)
+            }
         }
     }
 

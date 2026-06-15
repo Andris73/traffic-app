@@ -16,6 +16,8 @@
 		A100001901 /* RouteEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200001901 /* RouteEngine.swift */; };
 		A100001B01 /* GraphCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200001B01 /* GraphCatalog.swift */; };
 		A100001C01 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200001C01 /* SettingsView.swift */; };
+		A100001D01 /* CustomAreaBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200001D01 /* CustomAreaBuilder.swift */; };
+		A100001E01 /* CustomAreaSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200001E01 /* CustomAreaSheet.swift */; };
 		A100001A01 /* graph-cambridge.json in Resources */ = {isa = PBXBuildFile; fileRef = A200001A01 /* graph-cambridge.json */; };
 		A100001401 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A200001401 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
@@ -30,6 +32,8 @@
 		A200001901 /* RouteEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteEngine.swift; sourceTree = "<group>"; };
 		A200001B01 /* GraphCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphCatalog.swift; sourceTree = "<group>"; };
 		A200001C01 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		A200001D01 /* CustomAreaBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomAreaBuilder.swift; sourceTree = "<group>"; };
+		A200001E01 /* CustomAreaSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomAreaSheet.swift; sourceTree = "<group>"; };
 		A200001A01 /* graph-cambridge.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "graph-cambridge.json"; sourceTree = "<group>"; };
 		A200001301 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A200001401 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -93,6 +97,7 @@
 				A200001801 /* RoutingGraph.swift */,
 				A200001901 /* RouteEngine.swift */,
 				A200001B01 /* GraphCatalog.swift */,
+				A200001D01 /* CustomAreaBuilder.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -102,6 +107,7 @@
 			children = (
 				A200001101 /* ContentView.swift */,
 				A200001C01 /* SettingsView.swift */,
+				A200001E01 /* CustomAreaSheet.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -180,6 +186,8 @@
 				A100001901 /* RouteEngine.swift in Sources */,
 				A100001B01 /* GraphCatalog.swift in Sources */,
 				A100001C01 /* SettingsView.swift in Sources */,
+				A100001D01 /* CustomAreaBuilder.swift in Sources */,
+				A100001E01 /* CustomAreaSheet.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

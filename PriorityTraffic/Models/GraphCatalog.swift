@@ -14,9 +14,17 @@ struct GraphManifest: Codable {
     let areas: [GraphArea]
 }
 
+private struct UserAreaMeta: Codable {
+    let id: String
+    let name: String
+    let bbox: [Double]
+    let sizeBytes: Int
+}
+
 @MainActor
 final class GraphStore: ObservableObject {
     @Published var areas: [GraphArea] = []
+    @Published var userAreas: [GraphArea] = []
     @Published var installed: Set<String> = []
     @Published var downloading: Set<String> = []
     @Published private(set) var activeID: String
@@ -26,10 +34,12 @@ final class GraphStore: ObservableObject {
     private static let activeKey = "activeGraphID"
     private static let defaultID = "cambridge"
     private static let bundledResource = "graph-cambridge"
+    private static let userAreasFile = "user-areas.json"
 
     init() {
         activeID = UserDefaults.standard.string(forKey: Self.activeKey) ?? Self.defaultID
         seedBundled()
+        loadUserAreas()
         refreshInstalled()
     }
 
@@ -61,6 +71,10 @@ final class GraphStore: ObservableObject {
 
     func delete(_ area: GraphArea) {
         guard area.id != Self.defaultID else { return }
+        if userAreas.contains(where: { $0.id == area.id }) {
+            removeCustom(id: area.id)
+            return
+        }
         if let dir = graphsDirectory() {
             try? FileManager.default.removeItem(at: dir.appendingPathComponent("\(area.id).json"))
             refreshInstalled()
@@ -74,6 +88,37 @@ final class GraphStore: ObservableObject {
         guard installed.contains(id) else { return }
         activeID = id
         UserDefaults.standard.set(id, forKey: Self.activeKey)
+    }
+
+    func saveCustomGraph(id: String, data: Data) -> URL? {
+        guard let dir = graphsDirectory() else { return nil }
+        let url = dir.appendingPathComponent("\(id).json")
+        try? FileManager.default.removeItem(at: url)
+        do {
+            try data.write(to: url)
+            return url
+        } catch {
+            return nil
+        }
+    }
+
+    func registerCustom(area: GraphArea) {
+        userAreas.removeAll { $0.id == area.id }
+        userAreas.append(area)
+        persistUserAreas()
+        refreshInstalled()
+    }
+
+    func removeCustom(id: String) {
+        userAreas.removeAll { $0.id == id }
+        if let dir = graphsDirectory() {
+            try? FileManager.default.removeItem(at: dir.appendingPathComponent("\(id).json"))
+        }
+        persistUserAreas()
+        refreshInstalled()
+        if activeID == id {
+            setActive(Self.defaultID)
+        }
     }
 
     func activeURL() -> URL? {
@@ -99,11 +144,42 @@ final class GraphStore: ObservableObject {
         }
         if let dir = graphsDirectory(),
            let contents = try? FileManager.default.contentsOfDirectory(atPath: dir.path) {
-            for name in contents where name.hasSuffix(".json") {
+            for name in contents where name.hasSuffix(".json") && name != Self.userAreasFile {
                 ids.insert(String(name.dropLast(".json".count)))
             }
         }
         installed = ids
+    }
+
+    private func loadUserAreas() {
+        guard let dir = graphsDirectory() else { return }
+        let url = dir.appendingPathComponent(Self.userAreasFile)
+        guard let data = try? Data(contentsOf: url),
+              let metas = try? JSONDecoder().decode([UserAreaMeta].self, from: data) else {
+            return
+        }
+        userAreas = metas.compactMap { meta in
+            let fileURL = dir.appendingPathComponent("\(meta.id).json")
+            guard FileManager.default.fileExists(atPath: fileURL.path) else { return nil }
+            return GraphArea(
+                id: meta.id,
+                name: meta.name,
+                bbox: meta.bbox,
+                sizeBytes: meta.sizeBytes,
+                url: fileURL,
+                bundled: false
+            )
+        }
+    }
+
+    private func persistUserAreas() {
+        guard let dir = graphsDirectory() else { return }
+        let metas = userAreas.map {
+            UserAreaMeta(id: $0.id, name: $0.name, bbox: $0.bbox, sizeBytes: $0.sizeBytes)
+        }
+        if let data = try? JSONEncoder().encode(metas) {
+            try? data.write(to: dir.appendingPathComponent(Self.userAreasFile))
+        }
     }
 
     /// Make sure the catalogue always contains the bundled default, even before

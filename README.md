@@ -24,13 +24,14 @@ Roadmap:
    (give_way / stop / signals / mini-roundabout), road-class step-up at
    junctions, right-turn-across-oncoming (UK left-side), with a tunable
    aversion slider (0–3×, persisted) in Settings
-5. **Next** — **user-defined areas built on-device.** Pick a bounding box (e.g.
-   Cambridgeshire + Suffolk + Essex) and the app fetches and contracts the OSM
-   graph itself, so we don't have to ship every region. Removes the
-   committed-graphs stopgap entirely.
-6. **Later** — historical time-of-day traffic profiles seeded from UK
+5. **Done** — **user-defined areas built on-device.** Pan the map to your area
+   (e.g. Cambridgeshire + Suffolk + Essex), name it, tap Build. The app calls
+   Overpass, contracts the OSM graph in Swift, saves it locally, and switches
+   to it. Persists across launches.
+6. **Next** — historical time-of-day traffic profiles seeded from UK
    National Highways WebTRIS (free, OGL), then an optional opt-in live overlay
-   via TomTom or HERE free tier (per the traffic research)
+   via TomTom or HERE free tier (per the traffic research). Avoid Google/
+   Mapbox traffic — their licences forbid feeding a custom router.
 
 ## Build
 
