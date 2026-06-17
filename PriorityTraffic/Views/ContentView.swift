@@ -174,6 +174,9 @@ struct ContentView: View {
                 }
                 Spacer()
             }
+            if !route.isPreview && !navigating {
+                aversionRow
+            }
             HStack(spacing: 10) {
                 if navigating {
                     Button(role: .destructive) {
@@ -219,6 +222,19 @@ struct ContentView: View {
         let mins = Int(seconds / 60)
         if mins < 60 { return "\(mins) min" }
         return "\(mins / 60) h \(mins % 60) min"
+    }
+
+    private var aversionRow: some View {
+        VStack(spacing: 1) {
+            Slider(value: $engine.aversion, in: 0...3, step: 0.25)
+            HStack {
+                Text("Fastest")
+                Spacer()
+                Text("Avoid give-ways")
+            }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+        }
     }
 
     private var settingsButton: some View {

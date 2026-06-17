@@ -27,14 +27,17 @@ final class RoutingGraph: @unchecked Sendable {
     private static let flagSignal: UInt8 = 4
     private static let flagMiniRoundabout: UInt8 = 8
 
-    // Transition-cost components (seconds). Multiplied by the user's aversion
-    // factor at query time.
+    // Give-way penalties (seconds) — scaled by the user's aversion factor.
     private static let nodeGiveWay = 15.0
     private static let nodeStop = 25.0
-    private static let nodeSignal = 20.0
-    private static let nodeMiniRoundabout = 10.0
+    private static let nodeMiniRoundabout = 12.0
     private static let classStepPenalty = 12.0     // per class jumped (smaller -> bigger)
-    private static let rightTurnPenalty = 8.0      // right turn crossing oncoming traffic
+    private static let rightTurnPenalty = 10.0     // right turn crossing oncoming traffic
+
+    // Signals are NOT a give-way — you have priority on green. Model them as a
+    // small flat delay that always applies (not scaled by aversion) and is not
+    // counted as a give-way event.
+    private static let signalPenalty = 6.0
 
     init(coords: [CLLocationCoordinate2D], flags: [UInt8], adjacency: [[GraphEdge]]) {
         self.coords = coords
@@ -125,8 +128,9 @@ final class RoutingGraph: @unchecked Sendable {
             for (idx, edge) in adjacency[current].enumerated() {
                 let edgeTime = edge.length / Self.speed[edge.roadClass]
                 var transition = 0.0
-                if let prev = prevEdge, multiplier > 0 {
-                    transition = transitionCost(from: prev, at: current, to: edge) * multiplier
+                if let prev = prevEdge {
+                    let c = transitionCosts(from: prev, at: current, to: edge)
+                    transition = c.giveWay * multiplier + c.signal
                 }
                 let tentative = gScore[current] + edgeTime + transition
                 if tentative < gScore[edge.to] {
@@ -167,15 +171,15 @@ final class RoutingGraph: @unchecked Sendable {
             for i in 1..<(path.count - 1) {
                 let arrive = adjacency[path[i - 1]][cameEdge[path[i]]]
                 let leave = adjacency[path[i]][cameEdge[path[i + 1]]]
-                if transitionCost(from: arrive, at: path[i], to: leave) > 0 {
+                // Only true give-ways are events; signal-only stops are excluded.
+                if transitionCosts(from: arrive, at: path[i], to: leave).giveWay > 0 {
                     let v = path[i]
-                    let f = flags[v]
                     let step = leave.roadClass < arrive.roadClass
                     let turn = normalisedTurn(arrive.bearingOut, leave.bearingIn)
                     let rt = turn > 30 && turn < 150
                     events.append(GiveWayEvent(
                         coordinate: coords[v],
-                        flagBits: f,
+                        flagBits: flags[v],
                         classStep: step,
                         rightTurn: rt
                     ))
@@ -213,27 +217,28 @@ final class RoutingGraph: @unchecked Sendable {
         haversine(coords[a], coords[goal]) / Self.maxSpeed
     }
 
-    /// Cost added at `vertex` for the manoeuvre `prev` -> `vertex` -> `next`.
-    private func transitionCost(from prev: GraphEdge, at vertex: Int, to next: GraphEdge) -> Double {
-        var cost = 0.0
+    /// Costs added at `vertex` for the manoeuvre `prev` -> `vertex` -> `next`,
+    /// split into give-way cost (scaled by aversion) and a flat signal delay.
+    private func transitionCosts(from prev: GraphEdge, at vertex: Int, to next: GraphEdge) -> (giveWay: Double, signal: Double) {
+        var giveWay = 0.0
         let f = flags[vertex]
-        if f & Self.flagGiveWay != 0 { cost += Self.nodeGiveWay }
-        if f & Self.flagStop != 0 { cost += Self.nodeStop }
-        if f & Self.flagSignal != 0 { cost += Self.nodeSignal }
-        if f & Self.flagMiniRoundabout != 0 { cost += Self.nodeMiniRoundabout }
+        if f & Self.flagGiveWay != 0 { giveWay += Self.nodeGiveWay }
+        if f & Self.flagStop != 0 { giveWay += Self.nodeStop }
+        if f & Self.flagMiniRoundabout != 0 { giveWay += Self.nodeMiniRoundabout }
 
         // Joining a higher-class road from a lower-class one: typically yield.
         if next.roadClass < prev.roadClass {
-            cost += Double(prev.roadClass - next.roadClass) * Self.classStepPenalty
+            giveWay += Double(prev.roadClass - next.roadClass) * Self.classStepPenalty
         }
 
         // UK drives on the left, so a right turn crosses oncoming traffic.
         let turn = normalisedTurn(prev.bearingOut, next.bearingIn)
         if turn > 30, turn < 150 {
-            cost += Self.rightTurnPenalty
+            giveWay += Self.rightTurnPenalty
         }
 
-        return cost
+        let signal = (f & Self.flagSignal != 0) ? Self.signalPenalty : 0.0
+        return (giveWay, signal)
     }
 
     private func normalisedTurn(_ b1: Double, _ b2: Double) -> Double {

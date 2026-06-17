@@ -9,7 +9,6 @@ struct GiveWayEvent {
 
     var color: Color {
         if flagBits & 2 != 0 { return .red }        // stop sign
-        if flagBits & 4 != 0 { return .yellow }     // traffic signal
         if flagBits & 1 != 0 { return .orange }     // give-way marking
         if flagBits & 8 != 0 { return .blue }       // mini-roundabout
         if rightTurn { return .orange }              // right turn across oncoming
