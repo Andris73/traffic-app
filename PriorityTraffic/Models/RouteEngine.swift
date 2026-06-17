@@ -44,8 +44,11 @@ final class RouteEngine: ObservableObject {
     }
 
     func route(from: CLLocationCoordinate2D, to: CLLocationCoordinate2D) async -> Route? {
+        await route(from: from, to: to, multiplier: aversion)
+    }
+
+    func route(from: CLLocationCoordinate2D, to: CLLocationCoordinate2D, multiplier: Double) async -> Route? {
         guard let graph else { return nil }
-        let multiplier = aversion
         return await Task.detached(priority: .userInitiated) {
             graph.route(from: from, to: to, multiplier: multiplier)
         }.value

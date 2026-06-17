@@ -26,6 +26,13 @@ struct Route {
     let isPreview: Bool
 }
 
+struct RouteOption: Identifiable {
+    let label: String
+    let multiplier: Double
+    let route: Route
+    var id: Double { multiplier }
+}
+
 protocol Router {
     func route(from: CLLocationCoordinate2D, to: CLLocationCoordinate2D) async throws -> Route
 }

@@ -11,6 +11,7 @@ struct ContentView: View {
     @State private var destination: CLLocationCoordinate2D?
     @State private var destinationName = ""
     @State private var route: Route?
+    @State private var options: [RouteOption] = []
     @State private var navigating = false
     @State private var showSettings = false
     @FocusState private var searchFocused: Bool
@@ -38,7 +39,7 @@ struct ContentView: View {
                 recenterButton
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                     .padding(.trailing, 16)
-                    .padding(.bottom, insets.bottom + (route == nil ? 84 : 160))
+                    .padding(.bottom, insets.bottom + (route == nil ? 84 : (navigating ? 150 : 250)))
 
                 searchPanel
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
@@ -69,7 +70,7 @@ struct ContentView: View {
             Task { await rerouteIfBetter() }
         }
         .task(id: engine.aversion) {
-            guard let dest = destination, route != nil else { return }
+            guard let dest = destination, route != nil, !navigating else { return }
             try? await Task.sleep(for: .milliseconds(350))
             if Task.isCancelled { return }
             await computeRoute(to: dest)
@@ -85,6 +86,12 @@ struct ContentView: View {
             if let destination {
                 Marker(destinationName.isEmpty ? "Destination" : destinationName, coordinate: destination)
                     .tint(.green)
+            }
+            ForEach(options) { opt in
+                if abs(opt.multiplier - engine.aversion) > 0.001 {
+                    MapPolyline(coordinates: opt.route.coordinates)
+                        .stroke(.gray.opacity(0.55), lineWidth: 4)
+                }
             }
             if let route {
                 MapPolyline(coordinates: route.coordinates)
@@ -108,7 +115,7 @@ struct ContentView: View {
             }
             searchField
             if let route {
-                routeSummary(route)
+                routePanel(route)
             }
         }
     }
@@ -162,46 +169,21 @@ struct ContentView: View {
         .shadow(radius: 6, y: 2)
     }
 
-    private func routeSummary(_ route: Route) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("\(timeString(route.travelTimeSeconds))  ·  \(distanceString(route.distanceMeters))")
-                            .font(.headline)
-                    Text(detailLine(for: route))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-            }
-            if !route.isPreview && !navigating {
-                aversionRow
-            }
-            HStack(spacing: 10) {
-                if navigating {
-                    Button(role: .destructive) {
-                        navigating = false
-                    } label: {
-                        Label("Stop", systemImage: "stop.circle.fill")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.red)
+    private func routePanel(_ route: Route) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if navigating {
+                header(route, live: true)
+            } else {
+                if options.count > 1 {
+                    optionCards
                 } else {
-                    Button("Clear") { clear() }
-                        .buttonStyle(.bordered)
-                    if !route.isPreview {
-                        Button {
-                            navigating = true
-                        } label: {
-                            Label("Start", systemImage: "play.fill")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.blue)
-                    }
+                    header(route, live: false)
+                }
+                if !route.isPreview {
+                    aversionRow
                 }
             }
+            actionButtons(route)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
@@ -209,12 +191,85 @@ struct ContentView: View {
         .shadow(radius: 6, y: 2)
     }
 
-    private func detailLine(for route: Route) -> String {
+    private func header(_ route: Route, live: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("\(timeString(route.travelTimeSeconds))  ·  \(distanceString(route.distanceMeters))")
+                .font(.headline)
+            Text(detailLine(for: route, live: live))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var optionCards: some View {
+        HStack(spacing: 8) {
+            ForEach(options) { opt in
+                optionCard(opt)
+            }
+        }
+    }
+
+    private func optionCard(_ opt: RouteOption) -> some View {
+        let active = abs(opt.multiplier - engine.aversion) < 0.001
+        return Button {
+            selectOption(opt)
+        } label: {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(opt.label)
+                    .font(.caption.bold())
+                Text(timeString(opt.route.travelTimeSeconds))
+                    .font(.subheadline.weight(.semibold))
+                Text("\(opt.route.giveWayCount ?? 0) give-ways")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Text(distanceString(opt.route.distanceMeters))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(8)
+            .background(active ? Color.blue.opacity(0.18) : Color.secondary.opacity(0.12),
+                        in: RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(active ? Color.blue : .clear, lineWidth: 2))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func actionButtons(_ route: Route) -> some View {
+        HStack(spacing: 10) {
+            if navigating {
+                Button(role: .destructive) {
+                    navigating = false
+                } label: {
+                    Label("Stop", systemImage: "stop.circle.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.red)
+            } else {
+                Button("Clear") { clear() }
+                    .buttonStyle(.bordered)
+                if !route.isPreview {
+                    Button {
+                        navigating = true
+                    } label: {
+                        Label("Start", systemImage: "play.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.blue)
+                }
+            }
+        }
+    }
+
+    private func detailLine(for route: Route, live: Bool) -> String {
         if route.isPreview {
             return "Straight-line preview — destination is outside the active map."
         }
         let count = route.giveWayCount ?? 0
-        let prefix = navigating ? "Live" : "Give-way"
+        let prefix = live ? "Live" : "Give-way"
         return "\(prefix): \(count) events  ·  aversion \(String(format: "%.1f×", engine.aversion))"
     }
 
@@ -284,7 +339,41 @@ struct ContentView: View {
         Task {
             guard let coord = await search.resolve(item) else { return }
             destination = coord
-            await computeRoute(to: coord)
+            await computeOptions(to: coord)
+        }
+    }
+
+    private func selectOption(_ opt: RouteOption) {
+        route = opt.route
+        engine.aversion = opt.multiplier
+    }
+
+    @MainActor
+    private func computeOptions(to dest: CLLocationCoordinate2D) async {
+        guard let start = location.lastLocation?.coordinate else { return }
+        let presets: [(Double, String)] = [(0, "Fastest"), (1, "Balanced"), (3, "Priority")]
+        var seen = Set<String>()
+        var opts = [RouteOption]()
+        for (mult, label) in presets {
+            guard let r = await engine.route(from: start, to: dest, multiplier: mult) else { continue }
+            let sig = "\(r.giveWayCount ?? -1)-\(Int(r.distanceMeters / 20))"
+            if seen.contains(sig) { continue }
+            seen.insert(sig)
+            opts.append(RouteOption(label: label, multiplier: mult, route: r))
+        }
+
+        if opts.isEmpty {
+            options = []
+            route = try? await fallback.route(from: start, to: dest)
+        } else {
+            options = opts
+            let active = opts.first { $0.multiplier == 1 } ?? opts[0]
+            route = active.route
+            engine.aversion = active.multiplier
+        }
+
+        if route != nil, !navigating {
+            withAnimation { camera = .region(regionFitting(start, dest)) }
         }
     }
 
@@ -297,11 +386,6 @@ struct ContentView: View {
         }
         guard let result else { return }
         route = result
-        if !navigating {
-            withAnimation {
-                camera = .region(regionFitting(start, dest))
-            }
-        }
     }
 
     @MainActor
@@ -328,6 +412,7 @@ struct ContentView: View {
         destination = nil
         destinationName = ""
         route = nil
+        options = []
         search.query = ""
         search.results = []
         searchFocused = false
