@@ -56,6 +56,10 @@ struct ContentView: View {
         .onChange(of: store.activeID) { _, _ in
             engine.load(url: store.activeURL(), id: store.activeID)
         }
+        .onChange(of: engine.trafficEnabled) { _, _ in
+            guard let dest = destination else { return }
+            Task { await computeOptions(to: dest) }
+        }
         .onChange(of: navigating) { _, isNav in
             withAnimation {
                 camera = isNav
@@ -99,8 +103,15 @@ struct ContentView: View {
                 }
             }
             if let route {
-                MapPolyline(coordinates: route.coordinates)
-                    .stroke(.blue, lineWidth: 6)
+                if engine.trafficEnabled {
+                    ForEach(Array(route.segments.enumerated()), id: \.offset) { _, seg in
+                        MapPolyline(coordinates: seg.coordinates)
+                            .stroke(seg.level.color, lineWidth: 6)
+                    }
+                } else {
+                    MapPolyline(coordinates: route.coordinates)
+                        .stroke(.blue, lineWidth: 6)
+                }
                 ForEach(Array(route.giveWayEvents.enumerated()), id: \.offset) { _, event in
                     Annotation("", coordinate: event.coordinate) {
                         Circle()

@@ -10,8 +10,12 @@ final class RouteEngine: ObservableObject {
     @Published var aversion: Double {
         didSet { UserDefaults.standard.set(aversion, forKey: Self.aversionKey) }
     }
+    @Published var trafficEnabled: Bool {
+        didSet { UserDefaults.standard.set(trafficEnabled, forKey: Self.trafficKey) }
+    }
 
     private static let aversionKey = "giveWayAversion"
+    private static let trafficKey = "trafficEnabled"
     static let defaultAversion = 1.0
 
     private var graph: RoutingGraph?
@@ -21,6 +25,11 @@ final class RouteEngine: ObservableObject {
             self.aversion = stored
         } else {
             self.aversion = Self.defaultAversion
+        }
+        if UserDefaults.standard.object(forKey: Self.trafficKey) != nil {
+            self.trafficEnabled = UserDefaults.standard.bool(forKey: Self.trafficKey)
+        } else {
+            self.trafficEnabled = true
         }
     }
 
@@ -49,8 +58,12 @@ final class RouteEngine: ObservableObject {
 
     func route(from: CLLocationCoordinate2D, to: CLLocationCoordinate2D, multiplier: Double) async -> Route? {
         guard let graph else { return nil }
+        let traffic = TrafficModel(
+            enabled: trafficEnabled,
+            hour: Calendar.current.component(.hour, from: Date())
+        )
         return await Task.detached(priority: .userInitiated) {
-            graph.route(from: from, to: to, multiplier: multiplier)
+            graph.route(from: from, to: to, multiplier: multiplier, traffic: traffic)
         }.value
     }
 }

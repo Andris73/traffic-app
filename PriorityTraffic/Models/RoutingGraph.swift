@@ -102,7 +102,8 @@ final class RoutingGraph: @unchecked Sendable {
     func route(
         from: CLLocationCoordinate2D,
         to: CLLocationCoordinate2D,
-        multiplier: Double = 1.0
+        multiplier: Double = 1.0,
+        traffic: TrafficModel
     ) -> Route? {
         guard let start = nearestVertex(to: from), let goal = nearestVertex(to: to) else { return nil }
         let n = coords.count
@@ -126,7 +127,7 @@ final class RoutingGraph: @unchecked Sendable {
             }()
 
             for (idx, edge) in adjacency[current].enumerated() {
-                let edgeTime = edge.length / Self.speed[edge.roadClass]
+                let edgeTime = edge.length / (Self.speed[edge.roadClass] * traffic.speedFactor(roadClass: edge.roadClass))
                 var transition = 0.0
                 if let prev = prevEdge {
                     let c = transitionCosts(from: prev, at: current, to: edge)
@@ -155,6 +156,9 @@ final class RoutingGraph: @unchecked Sendable {
         var geometry = [CLLocationCoordinate2D]()
         var distance = 0.0
         var travelTime = 0.0
+        var segments = [RouteSegment]()
+        var segCoords = [CLLocationCoordinate2D]()
+        var segLevel: TrafficLevel?
         for i in 0..<(path.count - 1) {
             let edge = adjacency[path[i]][cameEdge[path[i + 1]]]
             if geometry.isEmpty {
@@ -163,7 +167,22 @@ final class RoutingGraph: @unchecked Sendable {
                 geometry.append(contentsOf: edge.geometry.dropFirst())
             }
             distance += edge.length
-            travelTime += edge.length / Self.speed[edge.roadClass]
+            travelTime += edge.length / (Self.speed[edge.roadClass] * traffic.speedFactor(roadClass: edge.roadClass))
+
+            let lvl = traffic.level(roadClass: edge.roadClass)
+            if segLevel == nil {
+                segLevel = lvl
+                segCoords = edge.geometry
+            } else if lvl == segLevel {
+                segCoords.append(contentsOf: edge.geometry.dropFirst())
+            } else {
+                segments.append(RouteSegment(coordinates: segCoords, level: segLevel!))
+                segLevel = lvl
+                segCoords = edge.geometry
+            }
+        }
+        if let segLevel, !segCoords.isEmpty {
+            segments.append(RouteSegment(coordinates: segCoords, level: segLevel))
         }
 
         var events = [GiveWayEvent]()
@@ -193,6 +212,7 @@ final class RoutingGraph: @unchecked Sendable {
             travelTimeSeconds: travelTime,
             giveWayCount: events.count,
             giveWayEvents: events,
+            segments: segments,
             isPreview: false
         )
     }

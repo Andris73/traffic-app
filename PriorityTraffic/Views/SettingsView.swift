@@ -33,6 +33,14 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    Toggle("Use traffic", isOn: $engine.trafficEnabled)
+                } header: {
+                    Text("Traffic")
+                } footer: {
+                    Text("Estimates congestion by road type and time of day, colours the route green/amber/red, and steers around jams. Traffic outweighs give-way aversion. Live Mapbox traffic is coming.")
+                }
+
+                Section {
                     AversionSlider(engine: engine)
                 } header: {
                     Text("Give-way aversion")

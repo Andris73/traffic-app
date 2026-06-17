@@ -17,12 +17,18 @@ struct GiveWayEvent {
     }
 }
 
+struct RouteSegment {
+    let coordinates: [CLLocationCoordinate2D]
+    let level: TrafficLevel
+}
+
 struct Route {
     let coordinates: [CLLocationCoordinate2D]
     let distanceMeters: CLLocationDistance
     let travelTimeSeconds: Double
     let giveWayCount: Int?
     let giveWayEvents: [GiveWayEvent]
+    let segments: [RouteSegment]
     let isPreview: Bool
 }
 
@@ -48,6 +54,7 @@ struct StraightLineRouter: Router {
             travelTimeSeconds: dist / 13,
             giveWayCount: nil,
             giveWayEvents: [],
+            segments: [RouteSegment(coordinates: [from, to], level: .free)],
             isPreview: true
         )
     }
