@@ -28,10 +28,12 @@ Roadmap:
    (e.g. Cambridgeshire + Suffolk + Essex), name it, tap Build. The app calls
    Overpass, contracts the OSM graph in Swift, saves it locally, and switches
    to it. Persists across launches.
-6. **Next** — historical time-of-day traffic profiles seeded from UK
-   National Highways WebTRIS (free, OGL), then an optional opt-in live overlay
-   via TomTom or HERE free tier (per the traffic research). Avoid Google/
-   Mapbox traffic — their licences forbid feeding a custom router.
+6. **Next** — traffic integration. Google and Mapbox have granted this project a
+   licence exception, so we may use their traffic data directly (incl. feeding
+   our custom router) alongside TomTom/HERE and UK open data (National Highways
+   WebTRIS, TfL). Mapbox Typical Traffic / traffic tiles fit our per-edge router
+   best (map-match per-segment speeds to OSM edges); Google's API is more
+   route-oriented. Note: a sideloaded IPA embeds any API key.
    **Weighting: traffic counts much more than give-way aversion** — users hate
    traffic more than giving way, so the ideal route is low-traffic first, then
    as few give-ways as possible. Traffic dominates the cost; give-way penalties
