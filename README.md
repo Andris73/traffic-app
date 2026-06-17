@@ -32,6 +32,10 @@ Roadmap:
    National Highways WebTRIS (free, OGL), then an optional opt-in live overlay
    via TomTom or HERE free tier (per the traffic research). Avoid Google/
    Mapbox traffic — their licences forbid feeding a custom router.
+   **Weighting: traffic counts much more than give-way aversion** — users hate
+   traffic more than giving way, so the ideal route is low-traffic first, then
+   as few give-ways as possible. Traffic dominates the cost; give-way penalties
+   stay a secondary refinement under the aversion slider.
 
 ## Build
 
