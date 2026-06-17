@@ -89,6 +89,14 @@ struct ContentView: View {
             if let route {
                 MapPolyline(coordinates: route.coordinates)
                     .stroke(.blue, lineWidth: 6)
+                ForEach(Array(route.giveWayEvents.enumerated()), id: \.offset) { _, event in
+                    Annotation("", coordinate: event.coordinate) {
+                        Circle()
+                            .fill(event.color)
+                            .frame(width: 10, height: 10)
+                            .overlay(Circle().stroke(.white, lineWidth: 1.5))
+                    }
+                }
             }
         }
     }
@@ -158,8 +166,8 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(distanceString(route.distanceMeters))
-                        .font(.headline)
+                    Text("\(timeString(route.travelTimeSeconds))  ·  \(distanceString(route.distanceMeters))")
+                            .font(.headline)
                     Text(detailLine(for: route))
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -203,9 +211,14 @@ struct ContentView: View {
             return "Straight-line preview — destination is outside the active map."
         }
         let count = route.giveWayCount ?? 0
-        let aversion = String(format: "%.2f×", engine.aversion)
         let prefix = navigating ? "Live" : "Give-way"
-        return "\(prefix): \(count) events  ·  aversion \(aversion)"
+        return "\(prefix): \(count) events  ·  aversion \(String(format: "%.1f×", engine.aversion))"
+    }
+
+    private func timeString(_ seconds: Double) -> String {
+        let mins = Int(seconds / 60)
+        if mins < 60 { return "\(mins) min" }
+        return "\(mins / 60) h \(mins % 60) min"
     }
 
     private var settingsButton: some View {

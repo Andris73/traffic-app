@@ -150,6 +150,7 @@ final class RoutingGraph: @unchecked Sendable {
 
         var geometry = [CLLocationCoordinate2D]()
         var distance = 0.0
+        var travelTime = 0.0
         for i in 0..<(path.count - 1) {
             let edge = adjacency[path[i]][cameEdge[path[i + 1]]]
             if geometry.isEmpty {
@@ -158,21 +159,38 @@ final class RoutingGraph: @unchecked Sendable {
                 geometry.append(contentsOf: edge.geometry.dropFirst())
             }
             distance += edge.length
+            travelTime += edge.length / Self.speed[edge.roadClass]
         }
 
-        // Give-way count = interior vertices whose transition cost was non-zero.
-        var giveWay = 0
+        var events = [GiveWayEvent]()
         if path.count >= 3 {
             for i in 1..<(path.count - 1) {
                 let arrive = adjacency[path[i - 1]][cameEdge[path[i]]]
                 let leave = adjacency[path[i]][cameEdge[path[i + 1]]]
                 if transitionCost(from: arrive, at: path[i], to: leave) > 0 {
-                    giveWay += 1
+                    let v = path[i]
+                    let f = flags[v]
+                    let step = leave.roadClass < arrive.roadClass
+                    let turn = normalisedTurn(arrive.bearingOut, leave.bearingIn)
+                    let rt = turn > 30 && turn < 150
+                    events.append(GiveWayEvent(
+                        coordinate: coords[v],
+                        flagBits: f,
+                        classStep: step,
+                        rightTurn: rt
+                    ))
                 }
             }
         }
 
-        return Route(coordinates: geometry, distanceMeters: distance, giveWayCount: giveWay, isPreview: false)
+        return Route(
+            coordinates: geometry,
+            distanceMeters: distance,
+            travelTimeSeconds: travelTime,
+            giveWayCount: events.count,
+            giveWayEvents: events,
+            isPreview: false
+        )
     }
 
     func nearestVertex(to c: CLLocationCoordinate2D) -> Int? {
