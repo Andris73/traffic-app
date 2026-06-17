@@ -16,6 +16,8 @@ struct ContentView: View {
     @State private var showSettings = false
     @FocusState private var searchFocused: Bool
 
+    @State private var lastRerouteAt = Date.distantPast
+
     private let fallback = StraightLineRouter()
     private let rerouteTimer = Timer.publish(every: 300, on: .main, in: .common).autoconnect()
 
@@ -68,6 +70,9 @@ struct ContentView: View {
         }
         .onReceive(rerouteTimer) { _ in
             Task { await rerouteIfBetter() }
+        }
+        .onReceive(location.$lastLocation) { loc in
+            if let loc { locationUpdate(loc) }
         }
         .task(id: engine.aversion) {
             guard let dest = destination, route != nil, !navigating else { return }
@@ -281,7 +286,7 @@ struct ContentView: View {
 
     private var aversionRow: some View {
         VStack(spacing: 1) {
-            Slider(value: $engine.aversion, in: 0...3, step: 0.25)
+            Slider(value: $engine.aversion, in: 0...10, step: 0.5)
             HStack {
                 Text("Fastest")
                 Spacer()
@@ -351,7 +356,7 @@ struct ContentView: View {
     @MainActor
     private func computeOptions(to dest: CLLocationCoordinate2D) async {
         guard let start = location.lastLocation?.coordinate else { return }
-        let presets: [(Double, String)] = [(0, "Fastest"), (1, "Balanced"), (3, "Priority")]
+        let presets: [(Double, String)] = [(0, "Fastest"), (3, "Balanced"), (10, "Priority")]
         var seen = Set<String>()
         var opts = [RouteOption]()
         for (mult, label) in presets {
@@ -367,7 +372,7 @@ struct ContentView: View {
             route = try? await fallback.route(from: start, to: dest)
         } else {
             options = opts
-            let active = opts.first { $0.multiplier == 1 } ?? opts[0]
+            let active = opts.first { $0.multiplier == 3 } ?? opts[0]
             route = active.route
             engine.aversion = active.multiplier
         }
@@ -405,6 +410,51 @@ struct ContentView: View {
         if better {
             route = candidate
         }
+    }
+
+    private func locationUpdate(_ loc: CLLocation) {
+        guard navigating, let dest = destination, let current = route else { return }
+        let off = distanceToRoute(loc.coordinate, current.coordinates)
+        guard off > 45, Date().timeIntervalSince(lastRerouteAt) > 8 else { return }
+        lastRerouteAt = Date()
+        Task { await rerouteFromCurrent(to: dest) }
+    }
+
+    @MainActor
+    private func rerouteFromCurrent(to dest: CLLocationCoordinate2D) async {
+        guard let start = location.lastLocation?.coordinate,
+              let r = await engine.route(from: start, to: dest) else { return }
+        route = r
+        options = []
+    }
+
+    private func distanceToRoute(_ p: CLLocationCoordinate2D, _ coords: [CLLocationCoordinate2D]) -> Double {
+        guard coords.count >= 2 else { return .greatestFiniteMagnitude }
+        let mLat = 111_320.0
+        let mLon = 111_320.0 * cos(p.latitude * .pi / 180)
+        func xy(_ c: CLLocationCoordinate2D) -> (x: Double, y: Double) {
+            ((c.longitude - p.longitude) * mLon, (c.latitude - p.latitude) * mLat)
+        }
+        var best = Double.greatestFiniteMagnitude
+        var prev = xy(coords[0])
+        for i in 1..<coords.count {
+            let cur = xy(coords[i])
+            best = min(best, segmentDistanceFromOrigin(prev, cur))
+            prev = cur
+        }
+        return best
+    }
+
+    private func segmentDistanceFromOrigin(_ a: (x: Double, y: Double), _ b: (x: Double, y: Double)) -> Double {
+        let dx = b.x - a.x
+        let dy = b.y - a.y
+        let len2 = dx * dx + dy * dy
+        if len2 == 0 { return (a.x * a.x + a.y * a.y).squareRoot() }
+        var t = -(a.x * dx + a.y * dy) / len2
+        t = max(0, min(1, t))
+        let px = a.x + t * dx
+        let py = a.y + t * dy
+        return (px * px + py * py).squareRoot()
     }
 
     private func clear() {

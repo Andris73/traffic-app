@@ -28,11 +28,11 @@ final class RoutingGraph: @unchecked Sendable {
     private static let flagMiniRoundabout: UInt8 = 8
 
     // Give-way penalties (seconds) — scaled by the user's aversion factor.
-    private static let nodeGiveWay = 15.0
-    private static let nodeStop = 25.0
-    private static let nodeMiniRoundabout = 12.0
-    private static let classStepPenalty = 12.0     // per class jumped (smaller -> bigger)
-    private static let rightTurnPenalty = 10.0     // right turn crossing oncoming traffic
+    private static let nodeGiveWay = 20.0
+    private static let nodeStop = 35.0
+    private static let nodeMiniRoundabout = 18.0
+    private static let classStepPenalty = 16.0     // per class jumped (smaller -> bigger)
+    private static let rightTurnPenalty = 14.0     // right turn crossing oncoming traffic
 
     // Signals are NOT a give-way — you have priority on green. Model them as a
     // small flat delay that always applies (not scaled by aversion) and is not
